@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -74,14 +75,12 @@ static void flag_menu_create();
 static void flag_menu_destroy();
 static void flag_menu_activated(GtkWidget *widget, gpointer data);
 static void app_menu_create();
-static void app_menu_destroy();
 static void app_menu_about(GtkWidget *widget, gpointer data);
 static void app_menu_exit(GtkWidget *widget, gpointer data);
 
 static int docklet_create();
 
 static int create_all();
-static void destroy_all();
 
 /******************************************************************
  * CODE                                                           *
@@ -163,17 +162,6 @@ app_menu_create()
 } 
 
 static void
-app_menu_destroy()
-{
-    ENTER;
-    if (app_menu) {
-        gtk_widget_destroy(app_menu);
-        app_menu = NULL;
-    }
-    RET();
-}
-
-static void
 app_menu_about(GtkWidget *widget, gpointer data)
 {
     ENTER;
@@ -197,7 +185,7 @@ static void
 app_menu_exit(GtkWidget *widget, gpointer data)
 {
     ENTER;    
-    gtk_exit();
+    exit(0);
     RET();
 }
 
@@ -356,7 +344,6 @@ read_kbd_description()
     if (sym_name_atom != None) {
         char *sym_name, *tmp, *tok;
         int no;
-        kbd_info *info;
         
         sym_name = XGetAtomName(dpy, sym_name_atom);
         if (!sym_name)
@@ -460,6 +447,20 @@ init()
     RET(1);
 }
 
+#if 0
+
+
+static void
+app_menu_destroy()
+{
+    ENTER;
+    if (app_menu) {
+        gtk_widget_destroy(app_menu);
+        app_menu = NULL;
+    }
+    RET();
+}
+
 static void
 destroy_all()
 {
@@ -470,6 +471,7 @@ destroy_all()
     flag_menu_destroy();
     app_menu_destroy();
 }
+#endif
 
 static int
 create_all()
