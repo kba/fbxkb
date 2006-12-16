@@ -1,0 +1,70 @@
+.\" man page originally for the Debian/GNU Linux system
+.TH FBPANEL "1" "February 2004" "fbxkb 2.2" "User Commands"
+.SH NAME
+fbxkb \- a lightweight GTK2-based panel for UNIX desktop.
+.SH SYNOPSIS
+.B fbxkb
+[\fIOPTION\fR]
+.br
+.SH DESCRIPTION
+.PP
+fbxkb is desktop panel which provides graphical information and feedback about 
+desktop activity and allows interaction with the window manager. 
+It features:
+.HP
+\(bu taskbar \- shows a list of the managed windows (tasks)
+.HP
+\(bu pager \- thumbnailed view of the desktop.
+.HP
+\(bu launchbar \- buttons to quickly launch applications
+.HP
+\(bu show desktop \- button to iconify or shade all windows 
+.HP
+\(bu image \- display an image
+.HP
+\(bu clock \- show the current time and/or date
+.HP
+\(bu system tray \- tray for XEMBED icons (aka docklets)
+.PP
+fbxkb requires NETWM (www.freedesktop.org) compliant window manager. 
+You can run many instances of fbxkb each with its own configuration
+(see \fBOPTIONS\fR below).
+
+Most updated info about fbxkb can be found on its home page:
+http://fbxkb.sf.net/
+
+.SH OPTIONS
+.TP
+\fB\-h\fR
+\- print help message and exit.
+.TP
+\fB\-v\fR
+\- print version and exit.
+.TP
+\fB\-p <name>\fR 
+\- use the profile <name>. The profile is loaded from the file ~/.fbxkb/<name>.
+If that fails, fbxkb will load PREFIX/share/fbxkb/<name>. No \fB\-p\fR option is equivalent
+to \fB\-p default\fR 
+.SH CUSTOMIZATION
+To change default settings, copy profile file to your home directory
+.br
+      mkdir -p ~/.fbxkb
+      cp PREFIX/share/fbxkb/default ~/.fbxkb
+.br
+and edit it. Default profile file contains comments and explanation inside,
+so it should be easy. For full list of options please visit fbxkb's home page.
+
+.SH FILES
+.TP
+PREFIX/share/fbxkb
+Directory with system-wide resources and default settings
+.TP
+~/.fbxkb/
+Directory with the user's private profiles
+.TP
+~/.fbxkb/default
+The user's default profile.
+.SH AUTHOR
+fbxkb was written by Anatoly Asviyan <aanatoly@users.sf.net>.
+This manual page was originally written for the
+Debian GNU/Linux system by Shyamal Prasad <shyamal@member.fsf.org>.
