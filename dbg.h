@@ -6,7 +6,8 @@
 #define RET2(args...)   do { fprintf(stderr, "%s:%-5d: RETURN\n", __FUNCTION__, __LINE__);\
 return args; } while(0)
 #define DBG3(fmt, args...) fprintf(stderr, fmt, ## args)
-#ifdef DBG
+
+#ifdef DEBUG
 
 #define ENTER          do { fprintf(stderr, "%s:%-5d: ENTER\n", __FUNCTION__, __LINE__); } while(0)
 #define RET(args...)   do { fprintf(stderr, "%s:%-5d: RETURN\n", __FUNCTION__, __LINE__);\

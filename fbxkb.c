@@ -100,7 +100,6 @@ flag_menu_create()
     //static GString *s = NULL;;
     
     ENTER;
-    DBG("kbd: %s\n", longname);
     flag_menu =  gtk_menu_new();
     for (i = 0; i < ngroups; i++) {
         mi = gtk_image_menu_item_new_with_label(group2info[i]->sym);
@@ -112,6 +111,7 @@ flag_menu_create()
         gtk_widget_show(img);
         gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(mi), img);
     }
+    RET();
 }
 
 static void
@@ -141,7 +141,6 @@ app_menu_create()
     GtkWidget *mi;
     
     ENTER;
-    DBG("kbd: %s\n", longname);
     app_menu =  gtk_menu_new();
 
     mi = gtk_image_menu_item_new_from_stock(GTK_STOCK_DIALOG_INFO, NULL);
@@ -159,17 +158,19 @@ app_menu_create()
     g_signal_connect(G_OBJECT(mi), "activate", (GCallback)app_menu_exit, NULL);
     gtk_menu_shell_append (GTK_MENU_SHELL (app_menu), mi);
     gtk_widget_show (mi);
-
+    RET();
 
 } 
 
 static void
 app_menu_destroy()
 {
+    ENTER;
     if (app_menu) {
         gtk_widget_destroy(app_menu);
         app_menu = NULL;
     }
+    RET();
 }
 
 static void
@@ -204,6 +205,7 @@ app_menu_exit(GtkWidget *widget, gpointer data)
 static void docklet_embedded(GtkWidget *widget, void *data) 
 {
     ENTER;
+    RET();
 }
 
 static void docklet_destroyed(GtkWidget *widget, void *data) 
@@ -221,7 +223,7 @@ void docklet_clicked(GtkWidget *button, GdkEventButton *event, void *data)
     //GtkWidget *menu;
     ENTER;
     if (event->type != GDK_BUTTON_PRESS)
-        return;
+        RET();
 
     if (event->button == 1) {
         int no;
@@ -234,7 +236,7 @@ void docklet_clicked(GtkWidget *button, GdkEventButton *event, void *data)
     } else if (event->button == 3) {
         gtk_menu_popup(GTK_MENU(app_menu), NULL, NULL, NULL, NULL, event->button, event->time);
     }
-  
+    RET();
 }
 
 static int 
@@ -297,14 +299,16 @@ sym2flag(char *sym)
 }
 
 
-static void read_kbd_description()
+static void
+read_kbd_description()
 {
     unsigned int mask;
     XkbDescRec *kbd_desc_ptr;
     XkbStateRec xkb_state;
     Atom sym_name_atom;
     int i;
-    
+
+    ENTER;
     mask = XkbControlsMask | XkbServerMapMask;
     kbd_desc_ptr = XkbAllocKeyboard();
     if (!kbd_desc_ptr)
@@ -379,6 +383,7 @@ static void read_kbd_description()
     }
  out:
     XkbFreeKeyboard(kbd_desc_ptr, 0, True);
+    RET();
 }
 
 
@@ -422,10 +427,12 @@ filter( XEvent *xev, GdkEvent *event, gpointer data)
     RET(GDK_FILTER_CONTINUE);
 }
 
-static int init()
+static int
+init()
 {
     int dummy;
-    
+
+    ENTER;
     sym2info = g_hash_table_new(g_str_hash, g_str_equal);
     sym2pix  = g_hash_table_new(g_str_hash, (GEqualFunc) my_str_equal);
     dpy = GDK_DISPLAY();
@@ -456,6 +463,7 @@ destroy_all()
 static int
 create_all()
 {
+    ENTER;
     read_kbd_description();
     docklet_create();
     flag_menu_create();
