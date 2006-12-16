@@ -1,3 +1,7 @@
+0.5 
+* fixed crash when there is no 'pc/pc' in description
+* using X server description of the group if available
+
 0.4
 * Fixed Bugs
   * 1048450	start up code issues

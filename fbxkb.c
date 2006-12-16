@@ -50,9 +50,8 @@ static int xkb_event_type;
 /* internal state mashine */
 static int cur_group;
 static int ngroups;
-static GHashTable *sym2info;
 static GHashTable *sym2pix;
-static kbd_info* group2info[XkbNumKbdGroups];
+static kbd_info group2info[XkbNumKbdGroups];
 static GdkPixbuf *zzflag;
 static int active;
 /* gtk gui */
@@ -67,7 +66,7 @@ static GtkWidget *about_dialog = NULL;
 
 static int init();
 static void read_kbd_description();
-static void update_flag(kbd_info *);
+static void update_flag(int no);
 static GdkFilterReturn filter( XEvent *xev, GdkEvent *event, gpointer data);
 static void Xerror_handler(Display * d, XErrorEvent * ev);
 static GdkPixbuf *sym2flag(char *sym);
@@ -102,11 +101,12 @@ flag_menu_create()
     ENTER;
     flag_menu =  gtk_menu_new();
     for (i = 0; i < ngroups; i++) {
-        mi = gtk_image_menu_item_new_with_label(group2info[i]->sym);
+        mi = gtk_image_menu_item_new_with_label(
+            group2info[i].name ? group2info[i].name : group2info[i].sym);
         g_signal_connect(G_OBJECT(mi), "activate", (GCallback)flag_menu_activated, GINT_TO_POINTER(i));
         gtk_menu_shell_append (GTK_MENU_SHELL (flag_menu), mi);
         gtk_widget_show (mi);
-        flag = sym2flag(group2info[i]->sym);
+        flag = sym2flag(group2info[i].sym);
         img = gtk_image_new_from_pixbuf(flag);
         gtk_widget_show(img);
         gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(mi), img);
@@ -252,6 +252,8 @@ docklet_create()
     g_signal_connect(G_OBJECT(docklet), "embedded", G_CALLBACK(docklet_embedded), NULL);
     g_signal_connect(G_OBJECT(docklet), "destroy", G_CALLBACK(docklet_destroyed), NULL);
     g_signal_connect(G_OBJECT(box), "button-press-event", G_CALLBACK(docklet_clicked), NULL);
+
+    gtk_container_set_border_width(GTK_CONTAINER(box), 1);
     
     gtk_container_add(GTK_CONTAINER(box), image);
     gtk_container_add(GTK_CONTAINER(docklet), box);
@@ -321,8 +323,15 @@ read_kbd_description()
     }
     ngroups = kbd_desc_ptr->ctrls->num_groups;
     DBG("ngroups = %d\n", ngroups);
-    for (i = 0; i < ngroups; i++)
-        group2info[i] = NULL;
+    for (i = 0; i < ngroups; i++) {
+        g_free(group2info[i].name);
+        g_free(group2info[i].sym);
+        group2info[i].name = NULL;
+        if (group2info[i].flag)
+            g_object_unref(G_OBJECT(group2info[i].flag));
+    }
+    bzero(group2info, sizeof(group2info));
+    DBG("sizeof(group2info)=%d\n", sizeof(group2info));
     // get current group
     if (XkbGetState(dpy, XkbUseCoreKbd, &xkb_state) != Success) {
         ERR("can't get Xkb state\n");
@@ -338,9 +347,14 @@ read_kbd_description()
      *    150 pc/pc(pc101)+pc/us+pc/ru(phonetic):2+group(shift_toggle)
      */
     XkbGetNames(dpy, XkbSymbolsNameMask, kbd_desc_ptr);
+    XkbGetNames(dpy, XkbGroupNamesMask, kbd_desc_ptr);
+    if (kbd_desc_ptr->names == NULL) {
+        ERR("Failed to get keyboard description\n");
+        goto out;
+    }
     sym_name_atom = kbd_desc_ptr->names->symbols;
     if (sym_name_atom != None) {
-        char *sym_name, *colon, *tok;
+        char *sym_name, *tmp, *tok;
         int no;
         kbd_info *info;
         
@@ -350,34 +364,30 @@ read_kbd_description()
         DBG("sym_name=%s\n", sym_name);
         for (tok = strtok(sym_name, "+"); tok; tok = strtok(NULL, "+")) {
             DBG("tok=%s\n", tok);
-            if (strlen(tok) < 5 /* "pc/pc" */)
-                continue;
-            if (strncmp(tok, "pc/", 3))
-                continue;
-            tok += 3;
-            if (!strncmp(tok, "pc", 2))
-                continue;
-            colon = strchr(tok, ':');
-            if (colon) {
-                if (sscanf(colon+1, "%d", &no) != 1) {
+            tmp = strchr(tok, ':');
+            if (tmp) {
+                if (sscanf(tmp+1, "%d", &no) != 1) 
                     ERR("can't read kbd number\n");
-                    continue;
-                }
                 no--;
-                *colon = 0;
+                *tmp = 0;
             } else {
                 no = 0;
             }
-            g_assert((no >= 0) && (no < ngroups) && (group2info[no] == NULL));
-            info = g_hash_table_lookup(sym2info, tok);
-            if (!info) {
-                info = g_new(kbd_info, 1);
-                info->sym = g_strdup(tok);
-                info->flag = sym2flag(tok);
-                g_hash_table_insert(sym2info, info->sym, info);
+            for (tmp = tok; isalpha(*tmp); tmp++);
+            *tmp = 0;
+
+            DBG("map=%s no=%d\n", tok, no);
+            if (!strcmp(tok, "pc") || !strcmp(tok, "group"))
+                continue;
+          
+            g_assert((no >= 0) && (no < ngroups));
+            if (group2info[no].sym != NULL) {
+                ERR("xkb group #%d is already defined\n", no);
             }
-            group2info[no] = info;
-            DBG("atom sym #%d '%s'\n", no, tok);
+            group2info[no].sym = g_strdup(tok);
+            group2info[no].flag = sym2flag(tok);
+            group2info[no].name = XGetAtomName(dpy,
+                  kbd_desc_ptr->names->groups[no]);           
         }
         XFree(sym_name);
     }
@@ -388,8 +398,9 @@ read_kbd_description()
 
 
 
-static void update_flag(kbd_info *k)
+static void update_flag(int no)
 {
+    kbd_info *k = &group2info[no];
     ENTER;
     g_assert(k != NULL);
     DBG("k->sym=%s\n", k->sym);
@@ -413,12 +424,12 @@ filter( XEvent *xev, GdkEvent *event, gpointer data)
             DBG("XkbStateNotify: %d\n", xkbev->state.group);
             cur_group = xkbev->state.group;
             if (cur_group < ngroups)
-                update_flag(group2info[cur_group]);
+                update_flag(cur_group);
         } else if (xkbev->any.xkb_type == XkbNewKeyboardNotify) {         
             DBG("XkbNewKeyboardNotify\n");
             read_kbd_description();
             cur_group = 0;
-            update_flag(group2info[cur_group]);
+            update_flag(cur_group);
             flag_menu_destroy();
             flag_menu_create();  
         }
@@ -433,7 +444,6 @@ init()
     int dummy;
 
     ENTER;
-    sym2info = g_hash_table_new(g_str_hash, g_str_equal);
     sym2pix  = g_hash_table_new(g_str_hash, (GEqualFunc) my_str_equal);
     dpy = GDK_DISPLAY();
     a_XKB_RULES_NAMES = XInternAtom(dpy, "_XKB_RULES_NAMES", False);
@@ -442,6 +452,7 @@ init()
 
     if (!XkbQueryExtension(dpy, &dummy, &xkb_event_type, &dummy, &dummy, &dummy))
         RET(0);
+    DBG("xkb_event_type=%d\n", xkb_event_type);
     XkbSelectEventDetails(dpy, XkbUseCoreKbd, XkbStateNotify,
           XkbAllStateComponentsMask, XkbGroupStateMask);
     gdk_window_add_filter(NULL, (GdkFilterFunc)filter, NULL);
@@ -468,7 +479,7 @@ create_all()
     docklet_create();
     flag_menu_create();
     app_menu_create();
-    update_flag(group2info[cur_group]);
+    update_flag(cur_group);
     active = 1;
     RET(FALSE);// FALSE will remove us from idle func
 }
