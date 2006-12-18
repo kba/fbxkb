@@ -68,7 +68,7 @@ tar:
 		exit 1;\
 	else\
 		ln -s $(CWD) fbxkb-$(VER);\
-		tar --exclude CVS -hzcvf fbxkb-$(VER).tgz fbxkb-$(VER);\
+		tar --exclude=.svn -hzcvf fbxkb-$(VER).tgz fbxkb-$(VER);\
 		rm -f fbxkb-$(VER);\
 	fi;
 

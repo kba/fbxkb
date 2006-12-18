@@ -241,7 +241,7 @@ docklet_create()
     g_signal_connect(G_OBJECT(docklet), "destroy", G_CALLBACK(docklet_destroyed), NULL);
     g_signal_connect(G_OBJECT(box), "button-press-event", G_CALLBACK(docklet_clicked), NULL);
 
-    gtk_container_set_border_width(GTK_CONTAINER(box), 1);
+    gtk_container_set_border_width(GTK_CONTAINER(box), 0);
     
     gtk_container_add(GTK_CONTAINER(box), image);
     gtk_container_add(GTK_CONTAINER(docklet), box);
@@ -299,48 +299,51 @@ read_kbd_description()
     int i;
 
     ENTER;
+    // clean up
+    cur_group = ngroups = 0;
+    for (i = 0; i < XkbNumKbdGroups; i++) {
+        g_free(group2info[i].sym);
+        g_free(group2info[i].name);
+        /*
+          if (group2info[i].flag)
+            g_object_unref(G_OBJECT(group2info[i].flag));
+        */
+    }
+    bzero(group2info, sizeof(group2info));
+
+    // get kbd info
     mask = XkbControlsMask | XkbServerMapMask;
     kbd_desc_ptr = XkbAllocKeyboard();
-    if (!kbd_desc_ptr)
-        RET();
+    if (!kbd_desc_ptr) {
+        ERR("can't alloc kbd info\n");
+        goto out_us;
+    }
     kbd_desc_ptr->dpy = dpy;
-    // get number of groups 
     if (XkbGetControls(dpy, XkbAllControlsMask, kbd_desc_ptr) != Success) {
         ERR("can't get Xkb controls\n");
         goto out;
     }
     ngroups = kbd_desc_ptr->ctrls->num_groups;
-    DBG("ngroups = %d\n", ngroups);
-    for (i = 0; i < ngroups; i++) {
-        g_free(group2info[i].name);
-        g_free(group2info[i].sym);
-        group2info[i].name = NULL;
-        if (group2info[i].flag)
-            g_object_unref(G_OBJECT(group2info[i].flag));
-    }
-    bzero(group2info, sizeof(group2info));
-    DBG("sizeof(group2info)=%d\n", sizeof(group2info));
-    // get current group
+    if (ngroups < 1)
+        goto out;
     if (XkbGetState(dpy, XkbUseCoreKbd, &xkb_state) != Success) {
         ERR("can't get Xkb state\n");
         goto out;
     }
     cur_group = xkb_state.group;
-    DBG("cur_group = %d\n", cur_group);
-
-    // get symbol description of all groups.
-    /* it is packed into the name of specific atom.
-     * to know how it might look like do this:
-     *    % xlsatoms | grep pc/pc
-     *    150 pc/pc(pc101)+pc/us+pc/ru(phonetic):2+group(shift_toggle)
-     */
-    XkbGetNames(dpy, XkbSymbolsNameMask, kbd_desc_ptr);
-    XkbGetNames(dpy, XkbGroupNamesMask, kbd_desc_ptr);
-    if (kbd_desc_ptr->names == NULL) {
-        ERR("Failed to get keyboard description\n");
+    DBG("cur_group = %d ngroups = %d\n", cur_group, ngroups);
+    g_assert(cur_group < ngroups);
+    
+    if (XkbGetNames(dpy, XkbSymbolsNameMask, kbd_desc_ptr) != Success) {
+        ERR("can't get Xkb symbol description\n");
         goto out;
     }
+    if (XkbGetNames(dpy, XkbGroupNamesMask, kbd_desc_ptr) != Success)
+        ERR("Failed to get keyboard description\n");
+    g_assert(kbd_desc_ptr->names);
     sym_name_atom = kbd_desc_ptr->names->symbols;
+
+    // parse kbd info
     if (sym_name_atom != None) {
         char *sym_name, *tmp, *tok;
         int no;
@@ -348,6 +351,11 @@ read_kbd_description()
         sym_name = XGetAtomName(dpy, sym_name_atom);
         if (!sym_name)
             goto out;
+        /* to know how sym_name might look like do this:
+         *    % xlsatoms | grep pc
+         *    150 pc/pc(pc101)+pc/us+pc/ru(phonetic):2+group(shift_toggle)
+         *    470 pc(pc105)+us+ru(phonetic):2+il(phonetic):3+group(shifts_toggle)+group(switch)
+         */
         DBG("sym_name=%s\n", sym_name);
         for (tok = strtok(sym_name, "+"); tok; tok = strtok(NULL, "+")) {
             DBG("tok=%s\n", tok);
@@ -373,13 +381,29 @@ read_kbd_description()
             }
             group2info[no].sym = g_strdup(tok);
             group2info[no].flag = sym2flag(tok);
-            group2info[no].name = XGetAtomName(dpy,
-                  kbd_desc_ptr->names->groups[no]);           
+            group2info[no].name = XGetAtomName(dpy, kbd_desc_ptr->names->groups[no]);           
         }
         XFree(sym_name);
     }
  out:
     XkbFreeKeyboard(kbd_desc_ptr, 0, True);
+    // sanity check: group numbering must be continous
+    for (i = 0; (i < XkbNumKbdGroups) && (group2info[i].sym != NULL); i++);
+    if (i != ngroups) {
+        ERR("kbd group numbering is not continous\n");
+        ERR("run 'xlsatoms | grep pc' to know what hapends\n");
+        exit(1);
+    }
+ out_us:
+    //if no groups were defined just add default 'us' kbd group
+    if (!ngroups) {
+        ngroups = 1;
+        cur_group = 0;
+        group2info[0].sym = g_strdup("us");
+        group2info[0].flag = sym2flag("us");
+        group2info[0].name = NULL;
+        ERR("no kbd groups defined. adding default 'us' group\n");
+    }
     RET();
 }
 
@@ -415,7 +439,7 @@ filter( XEvent *xev, GdkEvent *event, gpointer data)
         } else if (xkbev->any.xkb_type == XkbNewKeyboardNotify) {         
             DBG("XkbNewKeyboardNotify\n");
             read_kbd_description();
-            cur_group = 0;
+            //cur_group = 0;
             update_flag(cur_group);
             flag_menu_destroy();
             flag_menu_create();  

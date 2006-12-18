@@ -1,3 +1,9 @@
+0.6
+* Makefile does not include .svn in a tarball
+* if xorg has no groups fbxkb creates fallback 'us' group to display
+* some sanity checks
+* code clean up
+
 0.5 
 * fixed crash when there is no 'pc/pc' in description
 * using X server description of the group if available
