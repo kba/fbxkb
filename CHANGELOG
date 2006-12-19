@@ -3,6 +3,7 @@
 * if xorg has no groups fbxkb creates fallback 'us' group to display
 * some sanity checks
 * code clean up
+* 1-pixel border around a flag was removed
 
 0.5 
 * fixed crash when there is no 'pc/pc' in description
