@@ -8,6 +8,6 @@ fbxkb is  <a href="http://www.freedesktop.org/Standards/wm-spec">NETWM</a> compl
 </p> <br> <br>
 It's written in C and uses the <a href="http://www.gtk.org">GTK+-2.4</a> library only (no GNOME is needed).
 <br>
-<p>Latest version is <a href="http://sourceforge.net/project/showfiles.php?group_id=121660">fbxkb-0.5</a>
+<p>Latest version is <a href="http://sourceforge.net/project/showfiles.php?group_id=121660">fbxkb-0.6</a>
 </p>
 
