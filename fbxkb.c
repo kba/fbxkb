@@ -21,7 +21,6 @@
 
 #include "config.h"
 #include "eggtrayicon.h"
-#include "version.h"
 
 static gchar version[] = VERSION;
 

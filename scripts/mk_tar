@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# for this script to work you have to have text file 'version'
+# with a version (as a string) inside 
+
+n=`basename $PWD`-`cat version`
+t=$n.tbz2
+pwd=`pwd`
+
+td=/tmp/$$
+mkdir $td || exit 1
+cd $td 
+ln -s $pwd $n
+tar hjcvf $t --exclude .svn $n
+cd -
+cp $td/$t ..
+ls -al ../$t
+rm -rf $td
+

@@ -1,0 +1,9 @@
+include %%topdir%%/config.mk
+
+install : local_install
+
+local_install :
+	install -m 755 -d $(DESTDIR)$(DATADIR)/fbxkb/images
+	install -m 644 *.png $(DESTDIR)$(DATADIR)/fbxkb/images
+
+include %%topdir%%/rules.mk

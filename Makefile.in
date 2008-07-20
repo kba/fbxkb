@@ -1,0 +1,11 @@
+include %%topdir%%/config.mk
+
+SUBDIRS = images
+SRCS = eggtrayicon.c  fbxkb.c
+BINTARGET = fbxkb
+
+tar :
+	$(MAKE) distclean
+	scripts/mk_tar
+
+include %%topdir%%/rules.mk
