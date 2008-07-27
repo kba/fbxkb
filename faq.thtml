@@ -25,7 +25,7 @@ and fbxkb will update its view automatically.
 <p style="margin-left: 10px; padding: 0px">You can use setxkbmap to do it.
 For example, to load 3 keyboards - english, german and italian (us, de, it) and to switch betwean them
 using both shifts, run this:</p>
-<pre>setxkbmap -option grp:switch,grp:shift_toggle,grp_led:scroll us,de,it</pre>
+<pre>setxkbmap -option grp:switch,grp:shifts_toggle,grp_led:scroll us,de,it</pre>
 
 <p style="margin-left: 10px; padding: 0px">
 Alternatively, you can edit /etc/X11/XF86Config and restart X server, but any subsequent setxkbmap will overwrite
@@ -37,10 +37,10 @@ Section "InputDevice"
         Identifier      "Keyboard0"
         Driver          "kbd"
         Option          "XkbLayout"     "us,ru(phonetic)"
-        Option          "XkbOptions"    "grp:shift_toggle,grp_led:scroll"
+        Option          "XkbOptions"    "grp:shifts_toggle,grp_led:scroll"
 EndSection
 </pre>
 <p style="margin-left: 10px; padding: 0px">
 And same thing with setxkbmap
 </p>
-<pre>setxkbmap -option grp:switch,grp:shift_toggle,grp_led:scroll 'us,ru(phonetic)'</pre>
+<pre>setxkbmap -option grp:switch,grp:shifts_toggle,grp_led:scroll 'us,ru(phonetic)'</pre>
