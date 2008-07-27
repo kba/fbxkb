@@ -418,7 +418,32 @@ static void update_flag(int no)
     RET();
 }
 
+#define OPTIONS_SH LIBEXECDIR "/fbxkb/options.sh"
 
+static void
+update_option()
+{
+    gchar *argv[] = { OPTIONS_SH, NULL };
+    gchar *text;
+    gint standard_output;
+    gsize len;
+    GIOChannel *gio;
+
+    ENTER;
+    //g_printerr("exec: %s\n", argv[0]);
+    if (!g_spawn_async_with_pipes(NULL, argv, NULL, 0, NULL, NULL, NULL, NULL,
+                &standard_output, NULL, NULL))
+        RET();
+    gio = g_io_channel_unix_new (standard_output);
+    if (g_io_channel_read_to_end(gio, &text, &len, NULL) == G_IO_STATUS_NORMAL) {
+        g_strchomp(text);
+        gtk_widget_set_tooltip_text(docklet, text);
+    }
+    g_io_channel_shutdown(gio, FALSE, NULL);
+    //g_printerr("options:\n %s\n", text);
+    g_free(text);
+    RET();
+}
 
 static GdkFilterReturn
 filter( XEvent *xev, GdkEvent *event, gpointer data)
@@ -440,6 +465,7 @@ filter( XEvent *xev, GdkEvent *event, gpointer data)
             read_kbd_description();
             //cur_group = 0;
             update_flag(cur_group);
+            update_option();
             flag_menu_destroy();
             flag_menu_create();  
         }
@@ -505,6 +531,7 @@ create_all()
     flag_menu_create();
     app_menu_create();
     update_flag(cur_group);
+    update_option();
     active = 1;
     RET(FALSE);// FALSE will remove us from idle func
 }

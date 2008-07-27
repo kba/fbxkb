@@ -1,0 +1,9 @@
+include %%topdir%%/config.mk
+
+install : local_install
+
+local_install :
+	install -m 755 -d $(DESTDIR)$(LIBEXECDIR)/fbxkb/
+	install -m 755 options.sh $(DESTDIR)$(LIBEXECDIR)/fbxkb/
+
+include %%topdir%%/rules.mk

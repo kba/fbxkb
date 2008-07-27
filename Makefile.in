@@ -1,6 +1,6 @@
 include %%topdir%%/config.mk
 
-SUBDIRS = images
+SUBDIRS = images tools
 SRCS = eggtrayicon.c  fbxkb.c
 BINTARGET = fbxkb
 

@@ -1,0 +1,4 @@
+file=%%xkb_list_file%%
+var=`xprop -root _XKB_RULES_NAMES | sed -e 's/.*"\([^"]*\)"/\1/' -e 's/,/ /g'`
+for i in $var; do  grep $i $file; done | sort -u
+

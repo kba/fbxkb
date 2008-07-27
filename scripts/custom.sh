@@ -27,3 +27,5 @@ add_var gmodule_libs "gtk libs" '`scripts/pc.sh --libs gmodule-2.0`'
 add_var os "detect OS flavour" '`uname -s | tr [:lower:] [:upper:]`'
 add_var version "package version" '`cat version`'
 
+add_var xkb_list_file "XKB list file" /usr/share/X11/xkb/rules/base.lst
+
