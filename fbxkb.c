@@ -23,7 +23,7 @@
 #include "eggtrayicon.h"
 
 static gchar version[] = VERSION;
-
+static int hide_default; 
 
 //#define DEBUG
 #include "dbg.h"
@@ -84,6 +84,17 @@ static int create_all();
 /******************************************************************
  * CODE                                                           *
  ******************************************************************/
+static void
+help()
+{
+    ENTER;
+
+    printf("fbxkb - GTK+ standalone X11 keyboard switcher\n");
+    printf("Version: %s\n", version);
+    printf("Options\n");
+    printf("--hide-default - hide flag when default kbd language is active\n");
+    RET();
+}
 
 /******************************************************************
  * gtk gui                                                        *
@@ -101,7 +112,8 @@ flag_menu_create()
     for (i = 0; i < ngroups; i++) {
         mi = gtk_image_menu_item_new_with_label(
             group2info[i].name ? group2info[i].name : group2info[i].sym);
-        g_signal_connect(G_OBJECT(mi), "activate", (GCallback)flag_menu_activated, GINT_TO_POINTER(i));
+        g_signal_connect(G_OBJECT(mi), "activate",
+                (GCallback)flag_menu_activated, GINT_TO_POINTER(i));
         gtk_menu_shell_append (GTK_MENU_SHELL (flag_menu), mi);
         gtk_widget_show (mi);
         flag = sym2flag(group2info[i].sym);
@@ -169,7 +181,8 @@ app_menu_about(GtkWidget *widget, gpointer data)
               GTK_DIALOG_DESTROY_WITH_PARENT,
               GTK_MESSAGE_INFO,
               GTK_BUTTONS_CLOSE,
-              "fbxkb %s\nX11 Keyboard switcher\nAuthor: Anatoly Asviyan <aanatoly@users.sf.net>", version);
+              "fbxkb %s\nX11 Keyboard switcher\nAuthor: "
+              "Anatoly Asviyan <aanatoly@users.sf.net>", version);
         /* Destroy the dialog when the user responds to it (e.g. clicks a button) */
         g_signal_connect_swapped (about_dialog, "response",
               G_CALLBACK (gtk_widget_hide),
@@ -411,10 +424,17 @@ read_kbd_description()
 static void update_flag(int no)
 {
     kbd_info *k = &group2info[no];
+
     ENTER;
     g_assert(k != NULL);
     DBG("k->sym=%s\n", k->sym);
     gtk_image_set_from_pixbuf(GTK_IMAGE(image), k->flag);
+    if (!hide_default)
+        RET();
+    if (no)
+        gtk_widget_show(docklet);
+    else
+        gtk_widget_hide(docklet);
     RET();
 }
 
@@ -546,6 +566,17 @@ main(int argc, char *argv[], char *env[])
     XSetLocaleModifiers("");
     XSetErrorHandler((XErrorHandler) Xerror_handler);
 
+    for (; argv[1]; argv++) {
+        if (!strcmp(argv[1], "--hide-default"))
+            hide_default = 1;
+        else if (!strcmp(argv[1], "--help")) {
+            help();
+            exit(0);
+        } else {
+            help();
+            exit(1);
+        }
+    }
     if (!init())
         ERR("can't init. exiting\n");
     create_all();
