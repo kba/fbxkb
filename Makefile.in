@@ -1,7 +1,7 @@
 include %%topdir%%/config.mk
 
 SUBDIRS = images tools
-SRCS = eggtrayicon.c  fbxkb.c
+SRCS = fbxkb.c
 BINTARGET = fbxkb
 
 tar :
