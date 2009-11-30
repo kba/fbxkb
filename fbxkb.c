@@ -12,11 +12,11 @@
 #include <X11/Xlib.h>
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>
+#include <gdk/gdkx.h>
 
 #include <X11/XKBlib.h>
 
 #include "config.h"
-#include "eggtrayicon.h"
 
 
 //#define DEBUG
