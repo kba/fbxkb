@@ -22,565 +22,302 @@
 #include "config.h"
 #include "eggtrayicon.h"
 
-static gchar version[] = VERSION;
-static int hide_default; 
 
-//#define DEBUG
+#define DEBUG
 #include "dbg.h"
 
-/******************************************************************
- * TYPEDEFS                                                        *
- ******************************************************************/
-typedef struct _kbd_info {
-    gchar *sym;
+typedef struct {
+    gchar sym[3];
     gchar *name;
     GdkPixbuf *flag;
-} kbd_info;
+} kbd_group_t;
 
-#define IMGPREFIX PREFIX "/share/fbxkb/images/"
-/******************************************************************
- * GLOBAL VARSIABLES                                              *
- ******************************************************************/
+static int hide_default;
 
-/* X11 common stuff */
-static Atom a_XKB_RULES_NAMES;
-static Display *dpy;
-static int xkb_event_type;
+static GOptionEntry entries[] =
+{
+    { "hide-default", 0, 0, G_OPTION_ARG_NONE, &hide_default, 
+        "Hide flag when default keyboard is active", NULL },
+    { NULL }
+};
+static char *desription = "row 1\nrow 2\n";
 
-/* internal state mashine */
 static int cur_group;
 static int ngroups;
-static GHashTable *sym2pix;
-static kbd_info group2info[XkbNumKbdGroups];
-static GdkPixbuf *zzflag;
-static int active;
-/* gtk gui */
-static GtkWidget *flag_menu;
-static GtkWidget *app_menu;
-static GtkWidget *docklet;
-static GtkWidget *image;
-static GtkWidget *about_dialog = NULL;
-/******************************************************************
- * DECLARATION                                                    *
- ******************************************************************/
+static int xkb_event_type;
+static Display *dpy;
+static kbd_group_t group[XkbNumKbdGroups];
+static GdkPixbuf *default_flag;
+static GtkStatusIcon *icon;
 
-static int init();
-static void read_kbd_description();
-static void update_flag(int no);
-static GdkFilterReturn filter( XEvent *xev, GdkEvent *event, gpointer data);
+#define IMGPREFIX PREFIX "/share/fbxkb/images/"
 static void Xerror_handler(Display * d, XErrorEvent * ev);
-static GdkPixbuf *sym2flag(char *sym);
-static void flag_menu_create();
-static void flag_menu_destroy();
-static void flag_menu_activated(GtkWidget *widget, gpointer data);
-static void app_menu_create();
-static void app_menu_about(GtkWidget *widget, gpointer data);
-static void app_menu_exit(GtkWidget *widget, gpointer data);
+static GdkFilterReturn filter( XEvent *xev, GdkEvent *event, gpointer data);
 
-static int docklet_create();
-
-static int create_all();
-
-/******************************************************************
- * CODE                                                           *
- ******************************************************************/
-static void
-help()
-{
-    ENTER;
-
-    printf("fbxkb - GTK+ standalone X11 keyboard switcher\n");
-    printf("Version: %s\n", version);
-    printf("Options\n");
-    printf("--hide-default - hide flag when default kbd language is active\n");
-    RET();
-}
-
-/******************************************************************
- * gtk gui                                                        *
- ******************************************************************/
-static void
-flag_menu_create()
-{
-    int i;
-    GdkPixbuf *flag;
-    GtkWidget *mi, *img;
-    //static GString *s = NULL;;
-    
-    ENTER;
-    flag_menu =  gtk_menu_new();
-    for (i = 0; i < ngroups; i++) {
-        mi = gtk_image_menu_item_new_with_label(
-            group2info[i].name ? group2info[i].name : group2info[i].sym);
-        g_signal_connect(G_OBJECT(mi), "activate",
-                (GCallback)flag_menu_activated, GINT_TO_POINTER(i));
-        gtk_menu_shell_append (GTK_MENU_SHELL (flag_menu), mi);
-        gtk_widget_show (mi);
-        flag = sym2flag(group2info[i].sym);
-        img = gtk_image_new_from_pixbuf(flag);
-        gtk_widget_show(img);
-        gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(mi), img);
-    }
-    RET();
-}
-
-static void
-flag_menu_destroy()
-{
-    if (flag_menu) {
-        gtk_widget_destroy(flag_menu);
-        flag_menu = NULL;
-    }
-}
-
-static void
-flag_menu_activated(GtkWidget *widget, gpointer data)
-{
-    int i;
-
-    ENTER;    
-    i = GPOINTER_TO_INT(data);
-    DBG("asking %d group\n", i);
-    XkbLockGroup(dpy, XkbUseCoreKbd, i);
-    RET();
-}
-
-static void
-app_menu_create()
-{
-    GtkWidget *mi;
-    
-    ENTER;
-    app_menu =  gtk_menu_new();
-
-    mi = gtk_image_menu_item_new_from_stock(GTK_STOCK_DIALOG_INFO, NULL);
-    g_signal_connect(G_OBJECT(mi), "activate", (GCallback)app_menu_about, NULL);
-    gtk_menu_shell_append (GTK_MENU_SHELL (app_menu), mi);
-    gtk_widget_show (mi);
-
-    
-    mi = gtk_menu_item_new ();
-    gtk_widget_show (mi);
-    gtk_menu_shell_append (GTK_MENU_SHELL (app_menu), mi);
-    gtk_widget_set_sensitive (mi, FALSE);
-
-    mi = gtk_image_menu_item_new_from_stock(GTK_STOCK_QUIT, NULL);
-    g_signal_connect(G_OBJECT(mi), "activate", (GCallback)app_menu_exit, NULL);
-    gtk_menu_shell_append (GTK_MENU_SHELL (app_menu), mi);
-    gtk_widget_show (mi);
-    RET();
-
-} 
-
-static void
-app_menu_about(GtkWidget *widget, gpointer data)
-{
-    ENTER;
-    if (!about_dialog) {
-        about_dialog = gtk_message_dialog_new (NULL,
-              GTK_DIALOG_DESTROY_WITH_PARENT,
-              GTK_MESSAGE_INFO,
-              GTK_BUTTONS_CLOSE,
-              "fbxkb %s\nX11 Keyboard switcher\nAuthor: "
-              "Anatoly Asviyan <aanatoly@users.sf.net>", version);
-        /* Destroy the dialog when the user responds to it (e.g. clicks a button) */
-        g_signal_connect_swapped (about_dialog, "response",
-              G_CALLBACK (gtk_widget_hide),
-              about_dialog);
-    }
-    gtk_widget_show (about_dialog);
-    RET();
-}
-
-
-static void
-app_menu_exit(GtkWidget *widget, gpointer data)
-{
-    ENTER;    
-    exit(0);
-    RET();
-}
-
-
-static void docklet_embedded(GtkWidget *widget, void *data) 
-{
-    ENTER;
-    RET();
-}
-
-static void docklet_destroyed(GtkWidget *widget, void *data) 
-{
-    ENTER;
-    //g_object_unref(G_OBJECT(docklet));
-    docklet = NULL;
-    g_idle_add(create_all, NULL);
-    RET();
-}
-
-
-void docklet_clicked(GtkWidget *button, GdkEventButton *event, void *data) 
-{
-    //GtkWidget *menu;
-    ENTER;
-    if (event->type != GDK_BUTTON_PRESS)
-        RET();
-
-    if (event->button == 1) {
-        int no;
-
-        no =  (cur_group + 1) % ngroups;
-        DBG("no=%d\n", no);
-        XkbLockGroup(dpy, XkbUseCoreKbd, no);
-    } else if (event->button == 2) {
-        gtk_menu_popup(GTK_MENU(flag_menu), NULL, NULL, NULL, NULL, event->button, event->time);
-    } else if (event->button == 3) {
-        gtk_menu_popup(GTK_MENU(app_menu), NULL, NULL, NULL, NULL, event->button, event->time);
-    }
-    RET();
-}
-
-static int 
-docklet_create() 
-{
-    GtkWidget *box;
-    
-    ENTER;
-    docklet = (GtkWidget*)egg_tray_icon_new("fbxkb");
-    box     = gtk_event_box_new();
-    image   = gtk_image_new(); 
-    //image   = gtk_image_new();
-    g_signal_connect(G_OBJECT(docklet), "embedded", G_CALLBACK(docklet_embedded), NULL);
-    g_signal_connect(G_OBJECT(docklet), "destroy", G_CALLBACK(docklet_destroyed), NULL);
-    g_signal_connect(G_OBJECT(box), "button-press-event", G_CALLBACK(docklet_clicked), NULL);
-
-    gtk_container_set_border_width(GTK_CONTAINER(box), 0);
-    
-    gtk_container_add(GTK_CONTAINER(box), image);
-    gtk_container_add(GTK_CONTAINER(docklet), box);
-    gtk_widget_show_all(GTK_WIDGET(docklet));
-    
-    RET(1);
-}
-
-
-/******************************************************************
- * internal state machine                                         *
- ******************************************************************/
 static gboolean
-my_str_equal (gchar *a, gchar *b)
+clicked(GtkStatusIcon  *status_icon, GdkEventButton *event, gpointer data)  
 {
-    return  (a[0] == b[0] && a[1] == b[1]);
-}
-
-    
-static GdkPixbuf *
-sym2flag(char *sym)
-{
-    GdkPixbuf *flag;
-    static GString *s = NULL;
-    char tmp[3];
-    
     ENTER;
-    g_assert(sym != NULL && strlen(sym) > 1);
-    flag = g_hash_table_lookup(sym2pix, sym);
-    if (flag)
-        RET(flag);
-
-    if (!s) 
-        s = g_string_new(IMGPREFIX "tt.png");
-    s->str[s->len-6] = sym[0];
-    s->str[s->len-5] = sym[1];
-    flag = gdk_pixbuf_new_from_file_at_size(s->str, 24, 24, NULL);
-    if (!flag)
-        RET(zzflag);
-    tmp[0] = sym[0];
-    tmp[1] = sym[1];
-    tmp[2] = 0;
-    g_hash_table_insert(sym2pix, tmp, flag);
-    RET(flag);
+    if (event->button == 1) {
+        XkbLockGroup(dpy, XkbUseCoreKbd, (cur_group + 1) % ngroups);
+    }
+    RET(FALSE);
 }
-
 
 static void
-read_kbd_description()
+gui_extra_rebuild()
 {
-    unsigned int mask;
+    ENTER;
+    RET();
+}
+
+static void
+gui_update()
+{
+    ENTER;
+    DBG("group=%d name=%s flag=%p\n", cur_group, group[cur_group].name, 
+        group[cur_group].flag);
+    gtk_status_icon_set_from_pixbuf(icon, group[cur_group].flag);
+    if (hide_default) 
+        gtk_status_icon_set_visible(icon, cur_group);
+    RET();
+}
+
+static void
+gui_create()
+{
+    ENTER;
+    icon = gtk_status_icon_new();
+    g_signal_connect(G_OBJECT(icon), "button-press-event", G_CALLBACK(clicked), NULL);
+    RET();
+}
+
+/* loads flag image for the @country_code */
+static GdkPixbuf *
+get_flag(char *country_code)
+{
+    char file[] = "tt.png";
+    
+    ENTER;
+    DBG("country_code=%s\n", country_code);
+    if (strlen(country_code) != 2)
+        RET(NULL);
+
+    file[0] = country_code[0];
+    file[1] = country_code[1];
+    RET(gdk_pixbuf_new_from_file_at_size(file, 24, 24, NULL));
+}
+
+/* looks up corrsct flag image for every language group and replaces
+ * default_flag image when it is found.
+ * Flag is derived from xkb symbolic name, that looks something like that
+ *    pc(pc105)+us+ru(phonetic):2+il(phonetic):3+group(shifts_toggle)+group(switch)
+ *
+ * Run 'xlsatoms | grep pc' to see your value.
+ */
+static void
+get_group_flags(XkbDescRec *kbd_desc_ptr)
+{
+    char *symbols, *tmp, *tok;
+    GdkPixbuf *flag;
+    int no;
+
+    ENTER;
+    if (XkbGetNames(dpy, XkbSymbolsNameMask, kbd_desc_ptr)
+            != Success) {
+        ERR("XkbGetNames failed.\n");
+        RET();
+    }
+    if (kbd_desc_ptr->names->symbols == None || (symbols = 
+            XGetAtomName(dpy, kbd_desc_ptr->names->symbols)) == NULL) {
+        ERR("Can't get group symbol names\n");
+        RET();
+    }
+    DBG("symbols=%s\n", symbols);
+    for (tok = strtok(symbols, "+"); tok; tok = strtok(NULL, "+")) {
+        DBG("tok=%s\n", tok);
+
+        /* find group symbolic name (like en, us or ru) and group number */
+        tmp = strchr(tok, ':');
+        if (tmp) {
+            if (sscanf(tmp+1, "%d", &no) != 1) {
+                ERR("can't read group number in <%s> token\n", tok);
+                goto out;
+            }
+            no--;
+        } else {
+            no = 0;
+        }
+        if (no < 0 || no >= ngroups) {
+            ERR("Group number %d is out of range 1..%d in token <%s>\n",
+                no, ngroups, tok);
+            goto out;
+        }
+        for (tmp = tok; isalpha(*tmp); tmp++);
+        *tmp = 0;
+        /* if we have flag with same name, then replace default image.
+         * otherwise do nothing */
+        if ((flag = get_flag(tok)))
+            group[no].flag = flag;
+        DBG("sym %s flag %sfound \n", tok, flag ? "" : "NOT "); 
+    }
+
+out:
+    XFree(symbols);
+}
+
+static void
+free_group_info()
+{
+    int i;
+
+    for (i = 0; i < XkbNumKbdGroups; i++) {
+        if (group[i].name)
+            XFree(group[i].name);
+        if (group[i].flag && group[i].flag != default_flag)
+            g_object_unref(group[i].flag);
+    }
+    bzero(group, sizeof(group));
+}
+
+/* gets vital info to switch xkb language groups */
+static void
+get_group_info()
+{
     XkbDescRec *kbd_desc_ptr;
     XkbStateRec xkb_state;
-    Atom sym_name_atom;
     int i;
 
     ENTER;
-    // clean up
-    cur_group = ngroups = 0;
-    for (i = 0; i < XkbNumKbdGroups; i++) {
-        g_free(group2info[i].sym);
-        g_free(group2info[i].name);
-        /*
-          if (group2info[i].flag)
-            g_object_unref(G_OBJECT(group2info[i].flag));
-        */
-    }
-    bzero(group2info, sizeof(group2info));
-
-    // get kbd info
-    mask = XkbControlsMask | XkbServerMapMask;
     kbd_desc_ptr = XkbAllocKeyboard();
     if (!kbd_desc_ptr) {
         ERR("can't alloc kbd info\n");
-        goto out_us;
+        exit(1);
     }
-    kbd_desc_ptr->dpy = dpy;
-    if (XkbGetControls(dpy, XkbAllControlsMask, kbd_desc_ptr) != Success) {
+    //kbd_desc_ptr->dpy = GDK_DISPLAY();
+    if (XkbGetControls(dpy, XkbAllControlsMask, kbd_desc_ptr) !=
+            Success) {
         ERR("can't get Xkb controls\n");
         goto out;
     }
     ngroups = kbd_desc_ptr->ctrls->num_groups;
-    if (ngroups < 1)
+    if (ngroups < 1) {
+        ERR("No keyboard group found\n");
         goto out;
+    }
     if (XkbGetState(dpy, XkbUseCoreKbd, &xkb_state) != Success) {
         ERR("can't get Xkb state\n");
         goto out;
     }
     cur_group = xkb_state.group;
     DBG("cur_group = %d ngroups = %d\n", cur_group, ngroups);
-    g_assert(cur_group < ngroups);
-    
-    if (XkbGetNames(dpy, XkbSymbolsNameMask, kbd_desc_ptr) != Success) {
-        ERR("can't get Xkb symbol description\n");
+    if (XkbGetNames(dpy, XkbGroupNamesMask, kbd_desc_ptr) != Success) {
+        ERR("Can't get group names\n");
         goto out;
     }
-    if (XkbGetNames(dpy, XkbGroupNamesMask, kbd_desc_ptr) != Success)
-        ERR("Failed to get keyboard description\n");
-    g_assert(kbd_desc_ptr->names);
-    sym_name_atom = kbd_desc_ptr->names->symbols;
-
-    // parse kbd info
-    if (sym_name_atom != None) {
-        char *sym_name, *tmp, *tok;
-        int no;
-        
-        sym_name = XGetAtomName(dpy, sym_name_atom);
-        if (!sym_name)
+    for (i = 0; i < ngroups; i++) {
+        if (!(group[i].name = XGetAtomName(dpy, kbd_desc_ptr->names->groups[i]))) {
+            ERR("Can't get name of group #%d\n", i);
             goto out;
-        /* to know how sym_name might look like do this:
-         *    % xlsatoms | grep pc
-         *    150 pc/pc(pc101)+pc/us+pc/ru(phonetic):2+group(shift_toggle)
-         *    470 pc(pc105)+us+ru(phonetic):2+il(phonetic):3+group(shifts_toggle)+group(switch)
-         */
-        DBG("sym_name=%s\n", sym_name);
-        for (tok = strtok(sym_name, "+"); tok; tok = strtok(NULL, "+")) {
-            DBG("tok=%s\n", tok);
-            tmp = strchr(tok, ':');
-            if (tmp) {
-                if (sscanf(tmp+1, "%d", &no) != 1) 
-                    ERR("can't read kbd number\n");
-                no--;
-                *tmp = 0;
-            } else {
-                no = 0;
-            }
-            for (tmp = tok; isalpha(*tmp); tmp++);
-            *tmp = 0;
-
-            DBG("map=%s no=%d\n", tok, no);
-            if (!strcmp(tok, "pc") || !strcmp(tok, "group"))
-                continue;
-          
-            g_assert((no >= 0) && (no < ngroups));
-            if (group2info[no].sym != NULL) {
-                ERR("xkb group #%d is already defined\n", no);
-            }
-            group2info[no].sym = g_strdup(tok);
-            group2info[no].flag = sym2flag(tok);
-            group2info[no].name = XGetAtomName(dpy, kbd_desc_ptr->names->groups[no]);           
         }
-        XFree(sym_name);
+        group[i].flag = default_flag;
+        DBG("group[%d].name=%s\n", i, group[i].name);
     }
- out:
+
+    get_group_flags(kbd_desc_ptr);
+
+out:
     XkbFreeKeyboard(kbd_desc_ptr, 0, True);
-    // sanity check: group numbering must be continous
-    for (i = 0; (i < XkbNumKbdGroups) && (group2info[i].sym != NULL); i++);
-    if (i != ngroups) {
-        ERR("kbd group numbering is not continous\n");
-        ERR("run 'xlsatoms | grep pc' to know what hapends\n");
-        exit(1);
-    }
- out_us:
-    //if no groups were defined just add default 'us' kbd group
-    if (!ngroups) {
-        ngroups = 1;
-        cur_group = 0;
-        group2info[0].sym = g_strdup("us");
-        group2info[0].flag = sym2flag("us");
-        group2info[0].name = NULL;
-        ERR("no kbd groups defined. adding default 'us' group\n");
-    }
-    RET();
 }
-
-
-
-static void update_flag(int no)
-{
-    kbd_info *k = &group2info[no];
-
-    ENTER;
-    g_assert(k != NULL);
-    DBG("k->sym=%s\n", k->sym);
-    gtk_image_set_from_pixbuf(GTK_IMAGE(image), k->flag);
-    if (!hide_default)
-        RET();
-    if (no)
-        gtk_widget_show(docklet);
-    else
-        gtk_widget_hide(docklet);
-    RET();
-}
-
-#define OPTIONS_SH LIBEXECDIR "/fbxkb/options.sh"
-
-static void
-update_option()
-{
-    gchar *argv[] = { OPTIONS_SH, NULL };
-    gchar *text;
-    gint standard_output;
-    gsize len;
-    GIOChannel *gio;
-
-    ENTER;
-    //g_printerr("exec: %s\n", argv[0]);
-    if (!g_spawn_async_with_pipes(NULL, argv, NULL, 0, NULL, NULL, NULL, NULL,
-                &standard_output, NULL, NULL))
-        RET();
-    gio = g_io_channel_unix_new (standard_output);
-    if (g_io_channel_read_to_end(gio, &text, &len, NULL) == G_IO_STATUS_NORMAL) {
-        g_strchomp(text);
-        gtk_widget_set_tooltip_text(docklet, text);
-    }
-    g_io_channel_shutdown(gio, FALSE, NULL);
-    //g_printerr("options:\n %s\n", text);
-    g_free(text);
-    RET();
-}
-
+ 
 static GdkFilterReturn
 filter( XEvent *xev, GdkEvent *event, gpointer data)
 {
+    XkbEvent *xkbev;
+
     ENTER;
-    if (!active)
+    if (xev->type != xkb_event_type)
         RET(GDK_FILTER_CONTINUE);
    
-    if (xev->type ==  xkb_event_type) {
-        XkbEvent *xkbev = (XkbEvent *) xev;
-        DBG("XkbTypeEvent %d \n", xkbev->any.xkb_type);
-        if (xkbev->any.xkb_type == XkbStateNotify) {
-            DBG("XkbStateNotify: %d\n", xkbev->state.group);
-            cur_group = xkbev->state.group;
-            if (cur_group < ngroups)
-                update_flag(cur_group);
-        } else if (xkbev->any.xkb_type == XkbNewKeyboardNotify) {         
-            DBG("XkbNewKeyboardNotify\n");
-            read_kbd_description();
-            //cur_group = 0;
-            update_flag(cur_group);
-            update_option();
-            flag_menu_destroy();
-            flag_menu_create();  
+    xkbev = (XkbEvent *) xev;
+    DBG("XkbTypeEvent %d \n", xkbev->any.xkb_type);
+    if (xkbev->any.xkb_type == XkbStateNotify) {
+        DBG("XkbStateNotify: group=%d\n", xkbev->state.group);
+        cur_group = xkbev->state.group;
+        if (cur_group >= ngroups) {
+            ERR("current group is bigger then total group number");
+            cur_group = 0;
         }
-        RET(GDK_FILTER_REMOVE);
+        gui_update();
+    } else if (xkbev->any.xkb_type == XkbNewKeyboardNotify) {         
+        DBG("XkbNewKeyboardNotify\n");
+        free_group_info();
+        get_group_info();
+        gui_update();
+        gui_extra_rebuild();
     }
-    RET(GDK_FILTER_CONTINUE);
+    RET(GDK_FILTER_REMOVE);
 }
 
-static int
+static void
 init()
 {
     int dummy;
 
     ENTER;
-    sym2pix  = g_hash_table_new(g_str_hash, (GEqualFunc) my_str_equal);
+    if (!XkbQueryExtension(GDK_DISPLAY(), &dummy, &xkb_event_type, &dummy,
+            &dummy, &dummy)) {
+        ERR("no XKB extension\n");
+        exit(1);
+    }
+    XSetLocaleModifiers("");
+    XSetErrorHandler((XErrorHandler) Xerror_handler);
     dpy = GDK_DISPLAY();
-    a_XKB_RULES_NAMES = XInternAtom(dpy, "_XKB_RULES_NAMES", False);
-    if (a_XKB_RULES_NAMES == None)
-        ERR("_XKB_RULES_NAMES - can't get this atom\n");
-
-    if (!XkbQueryExtension(dpy, &dummy, &xkb_event_type, &dummy, &dummy, &dummy))
-        RET(0);
-    DBG("xkb_event_type=%d\n", xkb_event_type);
+    chdir(IMGPREFIX);
+    default_flag = get_flag("zz");
     XkbSelectEventDetails(dpy, XkbUseCoreKbd, XkbStateNotify,
           XkbAllStateComponentsMask, XkbGroupStateMask);
     gdk_window_add_filter(NULL, (GdkFilterFunc)filter, NULL);
-    zzflag = gdk_pixbuf_new_from_file_at_size(IMGPREFIX "zz.png", 24, 24, NULL);
-    RET(1);
-}
-
-#if 0
-
-
-static void
-app_menu_destroy()
-{
-    ENTER;
-    if (app_menu) {
-        gtk_widget_destroy(app_menu);
-        app_menu = NULL;
-    }
     RET();
 }
 
 static void
-destroy_all()
-{
-    active = 0;
-    gdk_window_remove_filter(NULL, (GdkFilterFunc)filter, NULL);
-    XkbSelectEventDetails(dpy, XkbUseCoreKbd, XkbStateNotify,
-          XkbAllStateComponentsMask, 0UL);
-    flag_menu_destroy();
-    app_menu_destroy();
-}
-#endif
-
-static int
 create_all()
 {
     ENTER;
-    read_kbd_description();
-    docklet_create();
-    flag_menu_create();
-    app_menu_create();
-    update_flag(cur_group);
-    update_option();
-    active = 1;
-    RET(FALSE);// FALSE will remove us from idle func
+    get_group_info();
+    gui_create();
+    gui_update();
+    gui_extra_rebuild();
+    RET();
 }
 
-int
-main(int argc, char *argv[], char *env[])
+int 
+main(int argc, char *argv[])
 {
-    ENTER;
-    setlocale(LC_CTYPE, "");
-    gtk_set_locale();
-    gtk_init(&argc, &argv);
-    XSetLocaleModifiers("");
-    XSetErrorHandler((XErrorHandler) Xerror_handler);
+    GOptionContext *context;
+    GError *error = NULL;
 
-    for (; argv[1]; argv++) {
-        if (!strcmp(argv[1], "--hide-default"))
-            hide_default = 1;
-        else if (!strcmp(argv[1], "--help")) {
-            help();
-            exit(0);
-        } else {
-            help();
-            exit(1);
-        }
+    ENTER;
+    gtk_set_locale();
+    context = g_option_context_new("- X11 keyboard switcher");
+    g_option_context_add_main_entries(context, entries, NULL);
+    g_option_context_add_group(context, gtk_get_option_group(TRUE));
+    g_option_context_set_description(context, desription);
+    if (!g_option_context_parse (context, &argc, &argv, &error)) {
+        g_print ("%s\n", error->message);
+        exit(1);
     }
-    if (!init())
-        ERR("can't init. exiting\n");
+    gtk_init(&argc, &argv);
+    if (argc > 1) {
+        g_print("Unknown option %s.\nRun '%s --help' for description\n", 
+           argv[1],  g_get_prgname());
+        exit(1);
+    }
+
+    init();
     create_all();
-    gtk_main ();
+    gtk_main();
     RET(0);
 }
 
