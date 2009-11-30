@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Creates tarball of configuration system for updates of client installations
+# To update an existing installation with this snapshot use
+#   scripts/update-proj    proj-ver.tbz2  (from root directory)
+
 # for this script to work you have to have text file 'version'
 # with a version (as a string) inside 
 

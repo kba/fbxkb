@@ -1,11 +1,6 @@
 include %%topdir%%/config.mk
 
-SUBDIRS = images tools
-SRCS = fbxkb.c
-BINTARGET = fbxkb
-
-tar :
-	$(MAKE) distclean
-	scripts/mk_tar
+SUBDIRS = src images tools
 
 include %%topdir%%/rules.mk
+
