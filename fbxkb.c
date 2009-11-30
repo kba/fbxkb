@@ -1,7 +1,3 @@
-
-
-
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -23,7 +19,7 @@
 #include "eggtrayicon.h"
 
 
-#define DEBUG
+//#define DEBUG
 #include "dbg.h"
 
 typedef struct {
@@ -49,10 +45,84 @@ static Display *dpy;
 static kbd_group_t group[XkbNumKbdGroups];
 static GdkPixbuf *default_flag;
 static GtkStatusIcon *icon;
+static GtkWidget *flag_menu;
 
 #define IMGPREFIX PREFIX "/share/fbxkb/images/"
 static void Xerror_handler(Display * d, XErrorEvent * ev);
 static GdkFilterReturn filter( XEvent *xev, GdkEvent *event, gpointer data);
+
+static void
+flag_menu_about(GtkWidget *widget, gpointer data)
+{
+    gchar *authors[] = { "Anatoly Asviyan <aanatoly@users.sf.net>", NULL };
+    ENTER;
+    gtk_show_about_dialog(NULL, 
+            "authors", authors,
+            "comments", "X11 keyboard language switcher", 
+            "license", "GPLv2",
+            "version", VERSION,
+            "website", "http://fbxkb.sf.net",
+            NULL);
+    RET();
+}
+
+
+static void
+flag_menu_exit(GtkWidget *widget, gpointer data)
+{
+    ENTER;    
+    exit(0);
+    RET();
+}
+
+
+
+static void
+flag_menu_activated(GtkWidget *widget, gpointer data)
+{
+    ENTER;    
+    DBG("asking %d group\n", GPOINTER_TO_INT(data));
+    XkbLockGroup(dpy, XkbUseCoreKbd, GPOINTER_TO_INT(data));
+    RET();
+}
+
+static void
+flag_menu_create()
+{
+    int i;
+    GtkWidget *mi, *img;
+    
+    ENTER;
+    flag_menu = gtk_menu_new();
+    /* flags */
+    for (i = 0; i < ngroups; i++) {
+        mi = gtk_image_menu_item_new_with_label(group[i].name);
+        g_signal_connect(G_OBJECT(mi), "activate",
+                (GCallback)flag_menu_activated, GINT_TO_POINTER(i));
+        gtk_menu_shell_append(GTK_MENU_SHELL(flag_menu), mi);
+        gtk_widget_show(mi);
+        img = gtk_image_new_from_pixbuf(group[i].flag);
+        gtk_widget_show(img);
+        gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(mi), img);
+    }
+    /* separator */
+    mi = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(flag_menu), mi);
+    gtk_widget_show(mi);
+    /* about */
+    mi = gtk_image_menu_item_new_from_stock(GTK_STOCK_ABOUT, NULL);
+    g_signal_connect(G_OBJECT(mi), "activate", (GCallback)flag_menu_about, NULL);
+    gtk_menu_shell_append (GTK_MENU_SHELL (flag_menu), mi);
+    gtk_widget_show (mi);
+    /* exit */
+    mi = gtk_image_menu_item_new_from_stock(GTK_STOCK_QUIT, NULL);
+    g_signal_connect(G_OBJECT(mi), "activate", (GCallback)flag_menu_exit, NULL);
+    gtk_menu_shell_append (GTK_MENU_SHELL (flag_menu), mi);
+    gtk_widget_show (mi);
+
+    RET();
+}
+
 
 static gboolean
 clicked(GtkStatusIcon  *status_icon, GdkEventButton *event, gpointer data)  
@@ -60,6 +130,10 @@ clicked(GtkStatusIcon  *status_icon, GdkEventButton *event, gpointer data)
     ENTER;
     if (event->button == 1) {
         XkbLockGroup(dpy, XkbUseCoreKbd, (cur_group + 1) % ngroups);
+    } else {
+        gtk_menu_popup(GTK_MENU(flag_menu), NULL, NULL,
+                gtk_status_icon_position_menu, icon, event->button,
+                event->time);
     }
     RET(FALSE);
 }
@@ -68,6 +142,9 @@ static void
 gui_extra_rebuild()
 {
     ENTER;
+    if (flag_menu) 
+        gtk_widget_destroy(flag_menu);
+    flag_menu_create();
     RET();
 }
 
@@ -273,7 +350,10 @@ init()
     XSetLocaleModifiers("");
     XSetErrorHandler((XErrorHandler) Xerror_handler);
     dpy = GDK_DISPLAY();
-    chdir(IMGPREFIX);
+    if (chdir(IMGPREFIX)) {
+        ERR("can't chdir to %s\n", IMGPREFIX);
+        exit(1);
+    }
     default_flag = get_flag("zz");
     XkbSelectEventDetails(dpy, XkbUseCoreKbd, XkbStateNotify,
           XkbAllStateComponentsMask, XkbGroupStateMask);
