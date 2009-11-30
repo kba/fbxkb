@@ -207,7 +207,7 @@ get_group_flags(XkbDescRec *kbd_desc_ptr)
         ERR("Can't get group symbol names\n");
         RET();
     }
-    DBG2("symbols=%s\n", symbols);
+    DBG("symbols=%s\n", symbols);
     for (tok = strtok(symbols, "+"); tok; tok = strtok(NULL, "+")) {
         DBG("tok=%s\n", tok);
 
