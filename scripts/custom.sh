@@ -20,6 +20,7 @@
 
 add_yesno_var dependency "generate dependency Makefiles" no
 
+add_var xkb_list_file "XKB list file" /usr/share/X11/xkb/rules/base.lst
 add_pkg_vars glib glib-2.0
 add_pkg_vars gtk  gtk+-2.0 "--atleast-version=2.12"
 
