@@ -29,11 +29,14 @@ typedef struct {
 } kbd_group_t;
 
 static int hide_default;
+static int display_version;
 
 static GOptionEntry entries[] =
 {
     { "hide-default", 0, 0, G_OPTION_ARG_NONE, &hide_default, 
         "Hide flag when default keyboard is active", NULL },
+    { "version", 0, 0, G_OPTION_ARG_NONE, &display_version, 
+        "Display the version and exit", NULL },
     { NULL }
 };
 static char *desription = "row 1\nrow 2\n";
@@ -432,7 +435,10 @@ main(int argc, char *argv[])
            argv[1],  g_get_prgname());
         exit(1);
     }
-
+    if (display_version) {
+        printf("%s %s\n", g_get_prgname(), VERSION);
+        exit(0);
+    }
     init();
     create_all();
     gtk_main();
