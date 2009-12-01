@@ -52,6 +52,30 @@ static void Xerror_handler(Display * d, XErrorEvent * ev);
 static GdkFilterReturn filter( XEvent *xev, GdkEvent *event, gpointer data);
 
 static void
+tooltip_set()
+{
+
+    gchar *argv[] = { LIBEXECDIR "/fbxkb/options.sh", NULL };
+    gchar *text;
+    gint standard_output;
+    gsize len;
+    GIOChannel *gio;
+
+    ENTER;
+    if (!g_spawn_async_with_pipes(NULL, argv, NULL, 0, NULL, NULL, NULL, NULL,
+                &standard_output, NULL, NULL))
+        RET();
+    gio = g_io_channel_unix_new (standard_output);
+    if (g_io_channel_read_to_end(gio, &text, &len, NULL) == G_IO_STATUS_NORMAL) {
+        g_strchomp(text);
+        gtk_status_icon_set_tooltip_markup(icon, text);
+    }
+    g_io_channel_shutdown(gio, FALSE, NULL);
+    g_free(text);
+    RET();
+}
+
+static void
 menu_about(GtkWidget *widget, gpointer data)
 {
     gchar *authors[] = { "Anatoly Asviyan <aanatoly@users.sf.net>", NULL };
@@ -142,6 +166,7 @@ gui_extra_rebuild()
     if (menu) 
         gtk_widget_destroy(menu);
     menu_create();
+    tooltip_set();
     RET();
 }
 
@@ -162,7 +187,9 @@ gui_create()
 {
     ENTER;
     icon = gtk_status_icon_new();
-    g_signal_connect(G_OBJECT(icon), "button-press-event", G_CALLBACK(clicked), NULL);
+    g_signal_connect(G_OBJECT(icon), "button-press-event", G_CALLBACK(clicked),
+            NULL);
+    g_object_set(gtk_settings_get_default(), "gtk-tooltip-timeout", 1500, NULL);
     RET();
 }
 
