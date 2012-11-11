@@ -18,6 +18,7 @@
 #include <gdk/gdk.h>
 
 #include <X11/XKBlib.h>
+#include <X11/Xatom.h>
 
 #include "config.h"
 #include "eggtrayicon.h"
@@ -421,6 +422,34 @@ static void update_flag(int no)
 }
 
 
+static Window root_window;
+static Window active_window;
+static Atom atom_net_active_window;
+static Atom atom_window_layout;
+
+static Window getActiveWindow() {
+  Atom actual_type_return;
+  int actual_format_return;
+  unsigned long nitems_return;
+  unsigned long bytes_after_return;
+  unsigned char *prop_return;
+  Window new_activewindow = 0;
+
+  if (Success == XGetWindowProperty(dpy, root_window, atom_net_active_window, 0, sizeof(Window)/4, FALSE, AnyPropertyType
+                                    , &actual_type_return
+                                    , &actual_format_return
+                                    , &nitems_return
+                                    , &bytes_after_return
+                                    , &prop_return)
+  )
+  {
+    if (nitems_return == 1) {
+      new_activewindow = *(Window*)prop_return;
+    }
+    XFree(prop_return);
+  }
+  return new_activewindow;
+}
 
 static GdkFilterReturn
 filter( XEvent *xev, GdkEvent *event, gpointer data)
@@ -429,6 +458,52 @@ filter( XEvent *xev, GdkEvent *event, gpointer data)
     if (!active)
         RET(GDK_FILTER_CONTINUE);
    
+    if (xev->type ==  PropertyNotify) {
+      XPropertyEvent * const xproperty = &xev->xproperty;
+      if (xproperty->window == root_window && xproperty->atom == atom_net_active_window) {
+        Window new_activewindow = getActiveWindow();
+        if (new_activewindow != 0 && active_window != new_activewindow) {
+          kbd_info *k = &group2info[cur_group];
+          DBG("save window = %p, layout = %s\n", (void*)active_window, k->sym);
+          XChangeProperty(dpy, active_window, atom_window_layout, XA_STRING, 8, PropModeReplace
+                          , (unsigned char *)k->sym, strlen(k->sym)+1);
+
+          DBG("new_activewindow = %p\n", (void*)new_activewindow);
+          active_window = new_activewindow;
+
+          {
+            Atom actual_type_return;
+            int actual_format_return;
+            unsigned long nitems_return;
+            unsigned long bytes_after_return;
+            unsigned char *prop_return;
+
+            if (Success == XGetWindowProperty(dpy, active_window, atom_window_layout, 0, 4096, FALSE, AnyPropertyType
+                                              , &actual_type_return
+                                              , &actual_format_return
+                                              , &nitems_return
+                                              , &bytes_after_return
+                                              , &prop_return)
+            )
+            {
+              if (nitems_return > 0) {
+                int no;
+                const char *sym = (const char *)prop_return;
+                for (no = 0; no < ngroups; no++) {
+                  if (0 == strcmp(group2info[no].sym, sym)) {
+                    DBG("restoring window %p, layout %s\n", (void*)active_window, sym);
+                    XkbLockGroup(dpy, XkbUseCoreKbd, no);
+                    break;
+                  }
+                }
+              }
+              XFree(prop_return);
+            }
+          }
+
+        }
+      }
+    }
     if (xev->type ==  xkb_event_type) {
         XkbEvent *xkbev = (XkbEvent *) xev;
         DBG("XkbTypeEvent %d \n", xkbev->any.xkb_type);
@@ -458,6 +533,16 @@ init()
     ENTER;
     sym2pix  = g_hash_table_new(g_str_hash, (GEqualFunc) my_str_equal);
     dpy = GDK_DISPLAY();
+
+    atom_net_active_window = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", TRUE);
+    atom_window_layout = XInternAtom(dpy, "FBXKB_WINDOW_LAYOUT", FALSE);
+    root_window = DefaultRootWindow(dpy);
+    active_window = getActiveWindow();
+    DBG("activewindow = %p\n", (void*)active_window);
+
+
+    XSelectInput(dpy, root_window, PropertyChangeMask);
+    
     a_XKB_RULES_NAMES = XInternAtom(dpy, "_XKB_RULES_NAMES", False);
     if (a_XKB_RULES_NAMES == None)
         ERR("_XKB_RULES_NAMES - can't get this atom\n");
