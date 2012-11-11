@@ -378,10 +378,11 @@ read_kbd_description()
             g_assert((no >= 0) && (no < ngroups));
             if (group2info[no].sym != NULL) {
                 ERR("xkb group #%d is already defined\n", no);
+            } else {
+                group2info[no].sym = g_strdup(tok);
+                group2info[no].flag = sym2flag(tok);
+                group2info[no].name = XGetAtomName(dpy, kbd_desc_ptr->names->groups[no]);           
             }
-            group2info[no].sym = g_strdup(tok);
-            group2info[no].flag = sym2flag(tok);
-            group2info[no].name = XGetAtomName(dpy, kbd_desc_ptr->names->groups[no]);           
         }
         XFree(sym_name);
     }
