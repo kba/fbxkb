@@ -1,0 +1,17 @@
+include /home/kb/build/fbxkb/config.mk
+
+
+# SRCS - C source to compile and add to linkage list
+SRCS = fbxkb.c
+
+# BINTARGET - name of binary to build from linkage list
+BINTARGET = fbxkb
+
+# to install your stuff edit the commands list
+install:
+	$(install) 755 $(BINDIR) 755 $(BINTARGET)
+
+
+
+
+include /home/kb/build/fbxkb/rules.mk

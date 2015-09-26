@@ -26,5 +26,5 @@ add_pkg_vars gtk  gtk+-2.0 "--atleast-version=2.12"
 
 # These vars are special - their values will be added to CFLAGS and LDFLAGS
 add_var cflagsx "C flags" '$glib_cflags $gtk_cflags -fPIC $alsa_cflags'
-add_var ldflagsx "linker flags" '$glib_libs $gtk_libs $alsa_libs'
+add_var ldflagsx "linker flags" '$glib_libs $gtk_libs $alsa_libs -lX11'
 
